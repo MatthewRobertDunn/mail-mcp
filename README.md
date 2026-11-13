@@ -179,8 +179,8 @@ Use `"command": "mail-mcp"` if installed globally, or `"command": "npx", "args":
 | `list_emails` | List recent emails from a folder with metadata and snippets |
 | `search_emails` | Search emails by sender, subject, date range, or keywords |
 | `read_email` | Fetch the full content of an email as Markdown |
-| `send_email` | Send a new email via SMTP |
-| `create_draft` | Save a draft to the Drafts folder without sending |
+| `send_email` | Send a new email via SMTP (supports `attachments`) |
+| `create_draft` | Save a draft to the Drafts folder without sending (supports `attachments`) |
 | `list_folders` | List all available folders and labels in a mailbox |
 | `move_email` | Move a message to another folder (Archive, Trash, Spam, etc.) |
 | `modify_labels` | Add or remove IMAP flags / provider labels on a message |
@@ -189,6 +189,31 @@ Use `"command": "mail-mcp"` if installed globally, or `"command": "npx", "args":
 | `extract_attachment_text` | Extract plain text from PDF and document attachments |
 | `register_oauth2_account` | Store OAuth2 tokens in Keychain for an account |
 | `batch_operations` | Apply move, delete, or label actions to multiple emails at once |
+
+## Attachments (fork addition)
+
+`send_email` and `create_draft` accept an `attachments` array. Each item
+provides exactly one source:
+
+- `{"path": "/workspace/resume.pdf"}` — a file on the MCP server host
+  (relative paths resolve against the server's working directory).
+  `filename` defaults to the basename; `contentType` overrides the MIME type.
+- `{"filename": "note.txt", "content": "<base64>"}` — file bytes inline.
+
+Max 10MB per file. The Sent/Drafts IMAP copy is rendered as real multipart
+MIME (with Date and Message-ID), so the stored message matches what was sent.
+Receiving is covered by the existing `get_attachment` (download via MCP
+Resource URI) and `extract_attachment_text` tools.
+
+```json
+{
+  "accountId": "jobs",
+  "to": "hiring@example.com",
+  "subject": "Application",
+  "body": "Please find my resume attached.",
+  "attachments": [{ "path": "/workspace/resume/Matthew_Dunn_Resume_Nov_2026.docx" }]
+}
+```
 
 ## Read-Only Mode
 

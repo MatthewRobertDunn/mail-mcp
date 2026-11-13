@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+import type { ResolvedAttachment } from '../utils/attachments.js';
 import { EmailAccount } from '../types/index.js';
 import { loadCredentials } from '../security/keychain.js';
 import { getValidAccessToken } from '../security/oauth2.js';
@@ -37,7 +38,7 @@ export class SmtpClient {
     await this.transporter.verify();
   }
 
-  async send(to: string, subject: string, body: string, isHtml: boolean = false, cc?: string, bcc?: string, extraHeaders?: Record<string, string>): Promise<any> {
+  async send(to: string, subject: string, body: string, isHtml: boolean = false, cc?: string, bcc?: string, extraHeaders?: Record<string, string>, attachments?: ResolvedAttachment[]): Promise<any> {
     if (!this.transporter) {
       throw new Error('SMTP client not connected');
     }
@@ -51,6 +52,9 @@ export class SmtpClient {
     if (bcc) mailOptions.bcc = bcc;
     if (extraHeaders && Object.keys(extraHeaders).length > 0) {
       mailOptions.headers = extraHeaders;
+    }
+    if (attachments && attachments.length > 0) {
+      mailOptions.attachments = attachments;
     }
 
     if (isHtml) {

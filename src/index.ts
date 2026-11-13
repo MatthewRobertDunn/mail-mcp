@@ -284,6 +284,19 @@ export class MailMCPServer {
               type: 'boolean',
               description: 'Whether to append the account signature (default: true). Set to false to suppress the signature for this message.'
             },
+            attachments: {
+              type: 'array',
+              description: 'Files to attach. Each item: {"path"} for a file on the server host (e.g. "/workspace/resume.pdf", relative paths resolve against the server working directory), or {"filename", "content"} with base64-encoded bytes. Optional "filename" overrides the basename for path items, "contentType" overrides the MIME type. Max 10MB per file.',
+              items: {
+                type: 'object',
+                properties: {
+                  path: { type: 'string', description: 'File path on the server host' },
+                  filename: { type: 'string', description: 'Attachment filename (defaults to basename for path items; required for content items)' },
+                  content: { type: 'string', description: 'Base64-encoded file content' },
+                  contentType: { type: 'string', description: 'MIME type override' }
+                }
+              }
+            },
             confirmationId: { type: 'string', description: 'Confirmation token from a prior confirmation-required response. Required to execute write operations when server is in --confirm mode.' }
           },
           required: ['accountId', 'to', 'subject', 'body']
@@ -306,6 +319,19 @@ export class MailMCPServer {
             includeSignature: {
               type: 'boolean',
               description: 'Whether to append the account signature (default: true). Set to false to suppress the signature for this draft.'
+            },
+            attachments: {
+              type: 'array',
+              description: 'Files to attach. Each item: {"path"} for a file on the server host (e.g. "/workspace/resume.pdf", relative paths resolve against the server working directory), or {"filename", "content"} with base64-encoded bytes. Optional "filename" overrides the basename for path items, "contentType" overrides the MIME type. Max 10MB per file.',
+              items: {
+                type: 'object',
+                properties: {
+                  path: { type: 'string', description: 'File path on the server host' },
+                  filename: { type: 'string', description: 'Attachment filename (defaults to basename for path items; required for content items)' },
+                  content: { type: 'string', description: 'Base64-encoded file content' },
+                  contentType: { type: 'string', description: 'MIME type override' }
+                }
+              }
             },
             confirmationId: { type: 'string', description: 'Confirmation token from a prior confirmation-required response. Required to execute write operations when server is in --confirm mode.' }
           },
@@ -895,7 +921,8 @@ export class MailMCPServer {
 
       if (name === 'send_email') {
         const service = await this.getService(args.accountId as string);
-        await (service as any).sendEmail(args.to, args.subject, args.body, args.isHtml, args.cc, args.bcc);
+        const includeSignature = (args.includeSignature as boolean | undefined) !== false;
+        await (service as any).sendEmail(args.to, args.subject, args.body, args.isHtml, args.cc, args.bcc, includeSignature, (args as any).attachments);
         return {
           content: [{ type: 'text', text: `Email successfully sent to ${args.to} and saved to Sent folder.` }],
         };
@@ -903,7 +930,8 @@ export class MailMCPServer {
 
       if (name === 'create_draft') {
         const service = await this.getService(args.accountId as string);
-        await (service as any).createDraft(args.to, args.subject, args.body, args.isHtml, args.cc, args.bcc);
+        const includeSignature = (args.includeSignature as boolean | undefined) !== false;
+        await (service as any).createDraft(args.to, args.subject, args.body, args.isHtml, args.cc, args.bcc, includeSignature, (args as any).attachments);
         return {
           content: [{ type: 'text', text: `Draft successfully created in Drafts folder.` }],
         };

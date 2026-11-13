@@ -120,4 +120,23 @@ describe('SmtpClient', () => {
     const callArgs = mockSendMail.mock.calls[0][0];
     expect(callArgs.headers).toBeUndefined();
   });
+
+  it('does not set attachments field when none provided', async () => {
+    const client = new SmtpClient(account);
+    await client.connect();
+    mockSendMail.mockClear();
+    await client.send('to@example.com', 'Subject', 'Body');
+    const callArgs = mockSendMail.mock.calls[0][0];
+    expect(callArgs.attachments).toBeUndefined();
+  });
+
+  it('passes attachments through to sendMail when provided', async () => {
+    const client = new SmtpClient(account);
+    await client.connect();
+    mockSendMail.mockClear();
+    const attachments = [{ filename: 'resume.pdf', content: Buffer.from('%PDF-1.4') }];
+    await client.send('to@example.com', 'Subject', 'Body', false, undefined, undefined, undefined, attachments as any);
+    const callArgs = mockSendMail.mock.calls[0][0];
+    expect(callArgs.attachments).toEqual(attachments);
+  });
 });

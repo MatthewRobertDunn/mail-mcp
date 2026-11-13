@@ -5,6 +5,7 @@ import { EmailAccount } from '../types/index.js';
 import { ValidationError } from '../errors.js';
 import { MessageBodyCache } from '../utils/message-cache.js';
 import { redactSensitiveContent } from '../utils/redact.js';
+import { AttachmentInput, buildRawMessage, resolveAttachments } from '../utils/attachments.js';
 import type { ParsedMail } from 'mailparser';
 
 /**
@@ -81,24 +82,40 @@ export class MailService {
     return this.imapClient.searchMessages(criteria, folder, count, offset);
   }
 
-  async sendEmail(to: string, subject: string, body: string, isHtml: boolean = false, cc?: string, bcc?: string, includeSignature: boolean = true): Promise<any> {
+  async sendEmail(to: string, subject: string, body: string, isHtml: boolean = false, cc?: string, bcc?: string, includeSignature: boolean = true, attachments?: AttachmentInput[]): Promise<any> {
     const effectiveBody = applySignature(body, this.account.signature, isHtml, includeSignature);
+    const resolvedAttachments = await resolveAttachments(attachments);
 
     // Build raw message before sending so we can append to Sent folder
-    const rawMessage = [
-      `From: ${this.account.user}`,
-      `To: ${to}`,
-      ...(cc ? [`Cc: ${cc}`] : []),
-      ...(bcc ? [`Bcc: ${bcc}`] : []),
-      `Subject: ${subject}`,
-      'MIME-Version: 1.0',
-      `Content-Type: ${isHtml ? 'text/html' : 'text/plain'}; charset=utf-8`,
-      '',
-      effectiveBody
-    ].join('\r\n');
+    const rawMessage = resolvedAttachments.length > 0
+      ? await buildRawMessage({
+          from: this.account.user,
+          to,
+          cc,
+          bcc,
+          subject,
+          text: isHtml ? undefined : effectiveBody,
+          html: isHtml ? effectiveBody : undefined,
+          attachments: resolvedAttachments,
+        })
+      : [
+          `From: ${this.account.user}`,
+          `To: ${to}`,
+          ...(cc ? [`Cc: ${cc}`] : []),
+          ...(bcc ? [`Bcc: ${bcc}`] : []),
+          `Subject: ${subject}`,
+          'MIME-Version: 1.0',
+          `Content-Type: ${isHtml ? 'text/html' : 'text/plain'}; charset=utf-8`,
+          '',
+          effectiveBody
+        ].join('\r\n');
 
     await this.ensureSmtp();
-    const info = await this.smtpClient.send(to, subject, effectiveBody, isHtml, cc, bcc);
+    // Keep the legacy 6-arg call shape when there are no attachments so the
+    // SMTP boundary is byte-identical for all existing callers.
+    const info = resolvedAttachments.length > 0
+      ? await this.smtpClient.send(to, subject, effectiveBody, isHtml, cc, bcc, undefined, resolvedAttachments)
+      : await this.smtpClient.send(to, subject, effectiveBody, isHtml, cc, bcc);
     try {
       await this.imapClient.appendMessage('Sent', rawMessage, ['\\Seen']);
     } catch (e) {
@@ -218,20 +235,32 @@ export class MailService {
     return info;
   }
 
-  async createDraft(to: string, subject: string, body: string, isHtml: boolean = false, cc?: string, bcc?: string, includeSignature: boolean = true): Promise<void> {
+  async createDraft(to: string, subject: string, body: string, isHtml: boolean = false, cc?: string, bcc?: string, includeSignature: boolean = true, attachments?: AttachmentInput[]): Promise<void> {
     const effectiveBody = applySignature(body, this.account.signature, isHtml, includeSignature);
+    const resolvedAttachments = await resolveAttachments(attachments);
 
-    const headers = [
-      `From: ${this.account.user}`,
-      `To: ${to}`,
-      ...(cc ? [`Cc: ${cc}`] : []),
-      ...(bcc ? [`Bcc: ${bcc}`] : []),
-      `Subject: ${subject}`,
-      'MIME-Version: 1.0',
-      `Content-Type: ${isHtml ? 'text/html' : 'text/plain'}; charset=utf-8`,
-      '',
-      effectiveBody
-    ].join('\r\n');
+    const headers = resolvedAttachments.length > 0
+      ? await buildRawMessage({
+          from: this.account.user,
+          to,
+          cc,
+          bcc,
+          subject,
+          text: isHtml ? undefined : effectiveBody,
+          html: isHtml ? effectiveBody : undefined,
+          attachments: resolvedAttachments,
+        })
+      : [
+          `From: ${this.account.user}`,
+          `To: ${to}`,
+          ...(cc ? [`Cc: ${cc}`] : []),
+          ...(bcc ? [`Bcc: ${bcc}`] : []),
+          `Subject: ${subject}`,
+          'MIME-Version: 1.0',
+          `Content-Type: ${isHtml ? 'text/html' : 'text/plain'}; charset=utf-8`,
+          '',
+          effectiveBody
+        ].join('\r\n');
 
     await this.imapClient.appendMessage('Drafts', headers, ['\\Draft']);
   }
